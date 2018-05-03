@@ -159,6 +159,7 @@ func startInNS(cmd *exec.Cmd, nss []specs.LinuxNamespace) error {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 
+	/*
 	for _, ns := range nss {
 		if ns.Path == "" {
 			// No path.  Just set a flag to create a new namespace.
@@ -173,6 +174,7 @@ func startInNS(cmd *exec.Cmd, nss []specs.LinuxNamespace) error {
 		}
 		defer restoreNS()
 	}
+	*/
 
 	return cmd.Start()
 }
