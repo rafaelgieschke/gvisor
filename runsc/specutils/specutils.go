@@ -23,6 +23,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"gvisor.googlesource.com/gvisor/pkg/abi/linux"
@@ -127,7 +129,7 @@ var capFromName = map[string]linux.Capability{
 	"CAP_SETPCAP":          linux.CAP_SETPCAP,
 	"CAP_LINUX_IMMUTABLE":  linux.CAP_LINUX_IMMUTABLE,
 	"CAP_NET_BIND_SERVICE": linux.CAP_NET_BIND_SERVICE,
-	"CAP_NET_BROAD_CAST":   linux.CAP_NET_BROAD_CAST,
+	"CAP_NET_BROADCAST":    linux.CAP_NET_BROADCAST,
 	"CAP_NET_ADMIN":        linux.CAP_NET_ADMIN,
 	"CAP_NET_RAW":          linux.CAP_NET_RAW,
 	"CAP_IPC_LOCK":         linux.CAP_IPC_LOCK,
@@ -153,6 +155,7 @@ var capFromName = map[string]linux.Capability{
 	"CAP_SYSLOG":           linux.CAP_SYSLOG,
 	"CAP_WAKE_ALARM":       linux.CAP_WAKE_ALARM,
 	"CAP_BLOCK_SUSPEND":    linux.CAP_BLOCK_SUSPEND,
+	"CAP_AUDIT_READ":       linux.CAP_AUDIT_READ,
 }
 
 func capsFromNames(names []string) (auth.CapabilitySet, error) {
@@ -180,4 +183,34 @@ func BinPath() (string, error) {
 		return "", fmt.Errorf(`error resolving "/proc/self/exe" symlink: %v`, err)
 	}
 	return binPath, nil
+}
+
+// WaitForReady waits for a process to become ready. The process is ready when
+// the 'ready' function returns true. It continues to wait if 'ready' returns
+// false. It returns error on timeout, if the process stops or if 'ready' fails.
+func WaitForReady(pid int, timeout time.Duration, ready func() (bool, error)) error {
+	backoff := 1 * time.Millisecond
+	for start := time.Now(); time.Now().Sub(start) < timeout; {
+		if ok, err := ready(); err != nil {
+			return err
+		} else if ok {
+			return nil
+		}
+
+		// Check if the process is still running.
+		var ws syscall.WaitStatus
+		var ru syscall.Rusage
+		child, err := syscall.Wait4(pid, &ws, syscall.WNOHANG, &ru)
+		if err != nil || child == pid {
+			return fmt.Errorf("process (%d) is not running, err: %v", pid, err)
+		}
+
+		// Process continues to run, backoff and retry.
+		time.Sleep(backoff)
+		backoff *= 2
+		if backoff > 1*time.Second {
+			backoff = 1 * time.Second
+		}
+	}
+	return fmt.Errorf("timed out waiting for process (%d)", pid)
 }
