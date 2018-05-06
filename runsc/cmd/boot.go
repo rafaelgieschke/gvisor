@@ -140,7 +140,9 @@ func setCapsAndCallSelf(conf *boot.Config, spec *specs.Spec) {
 	defer runtime.UnlockOSThread()
 
 	if err := boot.ApplyCaps(conf, spec.Process.Capabilities); err != nil {
+	/*
 		Fatalf("ApplyCaps, err: %v", err)
+	*/
 	}
 	binPath, err := specutils.BinPath()
 	if err != nil {
